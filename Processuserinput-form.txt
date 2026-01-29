@@ -1,0 +1,425 @@
+// Initialize the catalyst project information
+org_id = "60051487989";
+project_id = "23382000000044772";
+table_id = "23382000000046001";
+bot_name = "democustomertool";
+login_user_email = zoho.loginuserid;
+login_user_name = zoho.loginuser;
+stratus_base_url = "https://aibot-development.zohostratus.in/";
+zcql_url = "https://api.catalyst.zoho.in/baas/v1/project/" + project_id + "/query";
+sheet_base_url = "https://sheet.zoho.in/api/v2/";
+job_scheduling_url = "https://api.catalyst.zoho.in/baas/v1/project/" + project_id + "/job_scheduling/job";
+path = "functions.ProcessUserInput_function.submit_handler";
+internal_issue_param = {"text":"There is some internal issue. Please contact the tool owner.","userids":login_user_email};
+current_time = zoho.currenttime;
+// 1. Fetch form input values
+form_inputs = form.get("values");
+info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Pathilazh AI form submitted.","Response":form_inputs.toString(),"Reference":"","Reference ID":"","Added Time":current_time};
+request_type = form_inputs.getJSON("request_type").get("value");
+requested_by = form_inputs.getJSON("Email");
+if(request_type == "new_request")
+{
+	query_format = form_inputs.get("query_format").get("value");
+	questions_count = 0;
+	action_type = "Cron";
+	file_data = Map();
+	question_data = Map();
+	if(query_format == "text")
+	{
+		questions = form_inputs.getJSON("queries").toList("|||");
+		questions_count = questions.size();
+		question_id = 1;
+		// Validate each question and add it to the valid questions list
+		for each  question in questions
+		{
+			temp_question = question.trim();
+			temp_question_1 = temp_question.replaceAll("[^A-Za-z0-9]+","");
+			// Alpha-numerical characters only
+			temp_question_2 = temp_question.replaceAll("[^0-9]+","");
+			// numerical characters only
+			temp_question_3 = temp_question.replaceAll("[A-Za-z0-9 ]+","");
+			// special characters only
+			if(temp_question_1.length() < 15)
+			{
+				return {"type":"form_error","text":"The question should have at-least 15 Alpha-Numerical characters."};
+			}
+			else if(temp_question_2.length() > 5)
+			{
+				return {"type":"form_error","text":"The question should not contain more than 5 numbers."};
+			}
+			else if(temp_question_3.length() > 5)
+			{
+				return {"type":"form_error","text":"The question should not contain more than 5 special characters."};
+			}
+			question_data.put(question_id + "",{"question":question,"question_status":"VALID","reason":"valid question"});
+			question_id = question_id + 1;
+		}
+		action_type = if(questions_count < 30,"Job Scheduling",action_type);
+		file_data.putAll({"request_format":"text","pathilazh_data":question_data});
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"All questiona are validated for 'text' type query format.","Response":"","Reference":"","Reference ID":"","Added Time":current_time};
+	}
+	else if(query_format == "sheet")
+	{
+		resource_id = form_inputs.getJSON("resource_id");
+		sheet_name = form_inputs.getJSON("sheet_name");
+		sheet_id = form_inputs.getJSON("sheet_id");
+		start_row = form_inputs.getJSON("start_row");
+		end_row = form_inputs.getJSON("end_row");
+		exclude_rows = form_inputs.getJSON("exclude_rows");
+		question_column = form_inputs.getJSON("question_column");
+		response_column = form_inputs.getJSON("response_column");
+		// Validate the resource id input value 
+		if(resource_id.matches("^[a-z0-9]{30,}$") == false)
+		{
+			return {"type":"form_error","text":"Please enter a valid zoho sheet 'Resource ID'."};
+		}
+		// Validate the start row is less than or equal to end row
+		if(start_row > end_row)
+		{
+			return {"type":"form_error","text":"The 'Start Row' value must be less than or equal to the 'End Row' value."};
+		}
+		// Validate the exclude rows field value
+		if(exclude_rows.isEmpty() == false)
+		{
+			if(exclude_rows.matches("^[0-9-,]*$") == true)
+			{
+				if(exclude_rows.matches("^(\\d+(-\\d+)?)(,(\\d+(-\\d+)?))*$") == false)
+				{
+					return {"type":"form_error","text":"Please enter the 'Exclude Rows' in valid format."};
+				}
+				exclude_rows_list = exclude_rows.toList(",");
+				for each  exclude_row in exclude_rows_list
+				{
+					if(exclude_row.contains("-"))
+					{
+						temp_list = exclude_row.toList("-");
+						start_range = temp_list.get(0).toNumber();
+						end_range = temp_list.get(1).toNumber();
+						if(start_row > start_range)
+						{
+							return {"type":"form_error","text":"Please enter the 'Exclude Rows' in valid format."};
+						}
+						else if(start_range > end_range)
+						{
+							return {"type":"form_error","text":"Please enter the 'Exclude Rows' in valid format."};
+						}
+						else if(end_range > end_row)
+						{
+							return {"type":"form_error","text":"Please enter the 'Exclude Rows' in valid format."};
+						}
+					}
+					else
+					{
+						temp_range = exclude_row.toNumber();
+						if(start_row > temp_range)
+						{
+							return {"type":"form_error","text":"Please enter the 'Exclude Rows' in valid format."};
+						}
+						else if(temp_range > end_row)
+						{
+							return {"type":"form_error","text":"Please enter the 'Exclude Rows' in valid format."};
+						}
+					}
+				}
+			}
+			else
+			{
+				return {"type":"form_error","text":"Please enter the 'Exclude Rows' in valid format."};
+			}
+		}
+		// Valudate the question column
+		if(question_column.matches("^[A-Z]{1,2}$") == false)
+		{
+			return {"type":"form_error","text":"Please enter the valid 'Question Column' (" + question_column + ")."};
+		}
+		// Validate the response column
+		if(response_column.matches("^[A-Z]{1,2}$") == false)
+		{
+			return {"type":"form_error","text":"Please enter the valid 'Response Column' (" + response_column + ")."};
+		}
+		questions_count = end_row - start_row + 1;
+		action_type = if(questions_count < 30,"Job Scheduling",action_type);
+		// Get the list of questions from the zoho sheet
+		ascii_map = {'A':1,'B':2,'C':3,'D':4,'E':5,'F':6,'G':7,'H':8,'I':9,'J':10,'K':11,'L':12,'M':13,'N':14,'O':15,'P':16,'Q':17,'R':18,'S':19,'T':20,'U':21,'V':22,'W':23,'X':24,'Y':25,'Z':26};
+		// Get the question column and answer column value in integer data type
+		question_chars = question_column.toList("");
+		question_column_int = 0;
+		length = question_column.length() - 1;
+		for each  char in question_chars
+		{
+			question_column_int = question_column_int + 26.power(length) * ascii_map.get(char);
+			length = length - 1;
+		}
+		response_chars = response_column.toList("");
+		response_column_int = 0;
+		length = response_column.length() - 1;
+		for each  char in response_chars
+		{
+			response_column_int = response_column_int + 26.power(length) * ascii_map.get(char);
+			length = length - 1;
+		}
+		sheet_data_param = {"method":"range.content.get","worksheet_name":sheet_name,"start_row":start_row,"end_row":end_row,"start_column":question_column_int,"end_column":question_column_int};
+		sheet_data_response = invokeurl
+		[
+			url :sheet_base_url + resource_id
+			type :POST
+			parameters:sheet_data_param
+			detailed:true
+			connection:"ai_pathilaz"
+		];
+		sheet_data_responsecode = sheet_data_response.getJSON("responseCode");
+		if(sheet_data_responsecode == 401)
+		{
+			sheet_data_responsetext = sheet_data_response.getJSON("responseText");
+			info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"SEVERE","Log Data":"Execption occured while fetching date from sheet and status code is " + sheet_data_responsecode,"Response":sheet_data_responsetext.toString(),"Reference":"while fetching sheet data.","Reference ID":"","Added Time":current_time};
+			return {"type":"form_error","text":"You don't have access to get content from sheet. Please check the access/ Accept the connection."};
+		}
+		else if(sheet_data_responsecode != 200)
+		{
+			sheet_data_responsetext = sheet_data_response.getJSON("responseText");
+			info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"SEVERE","Log Data":"Execption occured while fetching date from sheet and status code is " + sheet_data_responsecode,"Response":sheet_data_responsetext.toString(),"Reference":"while fetching sheet data.","Reference ID":"","Added Time":current_time};
+			return {"type":"form_error","text":"Please enter the zoho sheet data correctly."};
+		}
+		response_text = sheet_data_response.getJSON("responseText");
+		rows = response_text.getJSON("range_details");
+		for each  row_data in rows
+		{
+			row_index = row_data.getJSON("row_index");
+			columns = row_data.getJSON("row_details");
+			column = columns.get(0);
+			content = column.get("content");
+			question_data.put(row_index + "",{"question":content});
+		}
+		file_data.putAll({"query_format":"sheet","input_data":{"resource_id":resource_id,"sheet_name":sheet_name,"sheet_id":sheet_id,"start_row":start_row,"end_row":end_row,"exclude_rows":exclude_rows,"question_column":question_column,"response_column":response_column,"response_column_int":response_column_int},"pathilazh_data":question_data});
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"All questiona are validated for 'sheet' type query format.","Response":"","Reference":"","Reference ID":"","Added Time":current_time};
+	}
+	// Insert new row into the catalyst datastore
+	insert_query = "INSERT INTO Pathilazh(REQUEST_TYPE,REQUESTED_BY,QUERY_TYPE,REQUEST_STATUS,ACTION_TYPE) VALUES ('New Request','" + requested_by + "','" + query_format + "','Pending','" + action_type + "')";
+	insert_row = {"query":insert_query};
+	insert_row_header = {"Content-Type":"application/json","CATALYST-ORG":org_id,"Environment":"Development"};
+	insert_row_response = invokeurl
+	[
+		url :zcql_url
+		type :POST
+		parameters:insert_row.toString()
+		headers:insert_row_header
+		detailed:true
+		connection:"admin_demo"
+	];
+	insert_row_response_code = insert_row_response.getJSON("responseCode");
+	if(insert_row_response_code != 200)
+	{
+		insert_row_response_text = insert_row_response.getJSON("responseText");
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"SEVERE","Log Data":"Exception occured while inserting data into table and status code is " + insert_row_response_code + ".","Response":insert_row_response_text.toString(),"Reference":"While inserting row into table.","Reference ID":"","Added Time":current_time};
+		notification_response = zoho.cliq.postToBot(bot_name,internal_issue_param);
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user due to add row failure.","Reference ID":"","Added Time":current_time};
+		return Map();
+	}
+	insert_row_data = insert_row_response.get("responseText").getJSON("data");
+	row_data = insert_row_data.get(0);
+	row_id = row_data.get("Pathilazh").get("ROWID");
+	// Upload the file data into the catalyst stratus
+	file_data.put("request_id",row_id);
+	file_name = row_id + ".json";
+	file = file_data.toFile(file_name);
+	file_upload_response = invokeurl
+	[
+		url :stratus_base_url + file_name
+		type :PUT
+		parameters:file
+		detailed:true
+		connection:"admin_demo"
+		content-type:"application/octet-stream"
+	];
+	file_upload_response_code = file_upload_response.getJSON("responseCode");
+	if(file_upload_response_code != 200)
+	{
+		file_upload_response_text = file_upload_response.getJSON("responseText");
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"SEVERE","Log Data":"Exception occured while uploading file and status code is " + file_upload_response_code + ".","Response":file_upload_response_text.toString(),"Reference":"While uploading file into stratus.","Reference ID":"","Added Time":current_time};
+		notification_response = zoho.cliq.postToBot(bot_name,internal_issue_param);
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user due to file upload failure.","Reference ID":"","Added Time":current_time};
+		return Map();
+	}
+	// Create job, if the action type is Job Scheduling
+	if(action_type == "Job Scheduling")
+	{
+		job_details = {"source_type":"API","job_config":{"number_of_retries":"","retry_interval":""},"job_name":row_id,"jobpool_id":"23382000000044823","target_type":"Function","target_id":"23382000000048003"};
+		job_header = {"Content-Type":"application/json","CATALYST-ORG":org_id,"Environment":"Development"};
+		create_job_response = invokeurl
+		[
+			url :job_scheduling_url
+			type :POST
+			parameters:job_details.toString()
+			headers:job_header
+			detailed:true
+			connection:"admin_demo"
+		];
+		create_job_responsecode = create_job_response.get("responseCode");
+		if(create_job_responsecode != 200)
+		{
+			create_job_response_text = create_job_response.getJSON("responseText");
+			info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"SEVERE","Log Data":"Exception occured while creating job " + create_job_responsecode + ".","Response":create_job_response_text.toString(),"Reference":"While creating job.","Reference ID":"","Added Time":current_time};
+			return Map();
+		}
+	}
+	info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":row_id,"Request Status":"","Log Type":"INFO","Log Data":"Request submission actions are completed.","Response":"","Reference":"While submitting new pathilazh-ai request.","Reference ID":"","Added Time":current_time};
+	success_message_param = {"text":"Dear " + login_user_name + ", your request (" + row_id + ") has been submitted successfully. We will update you once the process completed.","userids":login_user_email};
+	notification_response = zoho.cliq.postToBot(bot_name,success_message_param);
+	info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"successful form submission.","Reference ID":"","Added Time":current_time};
+	return Map();
+}
+else if(request_type == "status_enquiry" || request_type == "update_response")
+{
+	request_id = form_inputs.getJSON("request_id");
+	info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":request_id,"Request Status":"","Log Type":"INFO","Log Data":"Status enquiry/ update response into sheet request submitted.","Response":"","Reference":"While submitting new pathilazh-ai request.","Reference ID":"","Added Time":current_time};
+	// Check whether the request id exist or not
+	query = "SELECT * FROM Pathilazh WHERE Pathilazh.ROWID = " + request_id + ";";
+	zcql_param = {"query":query};
+	zcql_header = {"Content-Type":"application/json","CATALYST-ORG":org_id,"Environment":"Development"};
+	zcql_response = invokeurl
+	[
+		url :zcql_url
+		type :POST
+		parameters:zcql_param.toString()
+		headers:zcql_header
+		detailed:true
+		connection:"admin_demo"
+	];
+	zcql_response_code = zcql_response.getJSON("responseCode");
+	if(zcql_response_code != 200)
+	{
+		zcql_response_text = zcql_response.get("responseText");
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":request_id,"Request Status":"","Log Type":"SEVERE","Log Data":"Exception occured while fetching date from table.","Response":zcql_response_text.toString(),"Reference":"While fetching data from table.","Reference ID":"","Added Time":current_time};
+		notification_response = zoho.cliq.postToBot(bot_name,internal_issue_param);
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user due to record fetching from table failure.","Reference ID":"","Added Time":current_time};
+		return Map();
+	}
+	zcql_data_list = zcql_response.get("responseText").get("data");
+	if(zcql_data_list.size() == 0)
+	{
+		notification_param = {"text":"Please enter the valid request id.","userids":login_user_email};
+		notification_response = zoho.cliq.postToBot(bot_name,notification_param);
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user due to no records found for request id.","Reference ID":"","Added Time":current_time};
+		return Map();
+	}
+	temp_data = zcql_data_list.get(0);
+	zcql_data = temp_data.getJSON("Pathilazh");
+	requester_email_id = zcql_data.getJSON("REQUESTED_BY");
+	request_status = zcql_data.getJSON("REQUEST_STATUS");
+	if(requester_email_id != requested_by)
+	{
+		notification_param = {"text":"You don't have access to view the details of this request.","userids":login_user_email};
+		notification_response = zoho.cliq.postToBot(bot_name,notification_param);
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user due to invalid user access.","Reference ID":"","Added Time":current_time};
+		return Map();
+	}
+	if(request_type == "status_enquiry")
+	{
+		notification_param = {"text":"The current status of the request (" + request_id + ") is " + request_status + ".","userids":login_user_email};
+		notification_response = zoho.cliq.postToBot(bot_name,notification_param);
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user due to invalid user access.","Reference ID":"","Added Time":current_time};
+		return Map();
+	}
+	else if(request_type == "update_response")
+	{
+		// Implement the code for update response into sheet
+		query_type = zcql_data.getJSON("QUERY_TYPE");
+		if(query_type == "text")
+		{
+			notification_param = {"text":"The query format of the request is 'Text' and this format not applicable to update into sheet.","userids":login_user_email};
+			notification_response = zoho.cliq.postToBot(bot_name,notification_param);
+			info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user due to invalid user access.","Reference ID":"","Added Time":current_time};
+			return Map();
+		}
+		if(request_status != "Completed")
+		{
+			notification_param = {"text":"Your request process not yet completed. We will update you once the request process completd.Kindly wait some time.","userids":login_user_email};
+			notification_response = zoho.cliq.postToBot(bot_name,notification_param);
+			info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user due to request process not completed.","Reference ID":"","Added Time":current_time};
+			return Map();
+		}
+		// Download the file from catalyst stratus
+		file_name = request_id + ".json";
+		file_download_response = invokeurl
+		[
+			url :stratus_base_url + file_name
+			type :GET
+			detailed:true
+			connection:"admin_demo"
+		];
+		file_download_response_code = file_download_response.getJSON("responseCode");
+		if(file_download_response_code != 200)
+		{
+			file_download_response_text = file_download_response.get("responseText");
+			info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":request_id,"Request Status":"","Log Type":"SEVERE","Log Data":"Exception occured while downloading file from stratus.","Response":file_download_response_text.toString(),"Reference":"While downloading file from stratus.","Reference ID":"","Added Time":current_time};
+			notification_response = zoho.cliq.postToBot(bot_name,internal_issue_param);
+			info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user due to download file from stratus failure.","Reference ID":"","Added Time":current_time};
+			return Map();
+		}
+		file_content = file_download_response.getJSON("responseText");
+		input_fields = file_content.getJSON("input_data");
+		resource_id = input_fields.getJSON("resource_id");
+		sheet_id = input_fields.getJSON("sheet_id") + "#";
+		sheet_name = input_fields.getJSON("sheet_name");
+		column_id = input_fields.getJSON("response_column_int");
+		question_data = file_content.getJSON("pathilazh_data");
+		question_ids = question_data.keys();
+		update_list = List();
+		add_notes_list = List();
+		for each  question_id in question_ids
+		{
+			curr_question_data = question_data.getJSON(question_id);
+			question_status = curr_question_data.get("question_status");
+			rag_status = curr_question_data.get("rag_status");
+			if(question_status == "VALID" && rag_status == "KNOWN")
+			{
+				rag_content = curr_question_data.getJSON("rag_content");
+				update_list.add({"worksheet_id":sheet_id,"content":rag_content,"row":question_id,"column":column_id});
+				add_notes_list.add({"method":"cell.note.set","worksheet_name":sheet_name,"row":question_id,"column":column_id,"note":"The response was updated by Pathilazh-AI (powered by RAG on Zoho Catalyst). Kindly review and verify the content before sharing it with others."});
+			}
+		}
+		// Update the content into sheet by indexing
+		start = 0;
+		end = 49;
+		length = update_list.size();
+		temp_text = "";
+		temp_text_list = temp_text.leftPad(25).toList("");
+		for each  temp_char in temp_text_list
+		{
+			end = if(end > length,length,end);
+			if(start >= end)
+			{
+				break;
+			}
+			temp_list = update_list.subList(start,end);
+			update_param = {"method":"cells.content.set","data":temp_list};
+			update_response = invokeurl
+			[
+				url :sheet_base_url + resource_id
+				type :POST
+				parameters:update_param
+				connection:"ai_pathilaz"
+			];
+			info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":request_id,"Request Status":"","Log Type":"INFO","Log Data":"Response of the sheet content update from " + start + " to " + end,"Response":update_response.toString(),"Reference":"While updating the sheet content.","Reference ID":"","Added Time":current_time};
+			start = start + 49;
+			end = end + 49;
+		}
+		// Add notes to each cell
+		for each  curr_note in add_notes_list
+		{
+			add_note_response = invokeurl
+			[
+				url :sheet_base_url + resource_id
+				type :POST
+				parameters:curr_note
+				connection:"ai_pathilaz"
+			];
+		}
+		notification_param = {"text":"The response generated by Pathilazh-AI (powered by RAG on Zoho Catalyst) has been updated in your sheet. Kindly review and verify the content before sharing it with others.","userids":login_user_email};
+		notification_response = zoho.cliq.postToBot(bot_name,notification_param);
+		info {"Service":"Cliq","Org id":"","Project":"","Workitem Name":"pathilazh_ai","Path":path,"Execution id":"","Request Status":"","Log Type":"INFO","Log Data":"Cliq bot notification to user.","Response":notification_response.toString(),"Reference":"Send bot notiifcation to user after updated the sheet content.","Reference ID":"","Added Time":current_time};
+		return Map();
+	}
+}
+return Map();
+
