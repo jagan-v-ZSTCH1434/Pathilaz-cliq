@@ -1,0 +1,96 @@
+/**
+1. Collect user submitted form inputs
+2. Check the request type, and execute the respective flow
+3. Check the query format and execute the respective flow
+*/
+// 1. Collect user submitted form inputs
+form_inputs = form.get("values");
+info form_inputs;
+request_type = form_inputs.getJSON("request_type").get("value");
+query_format = "";
+query_format_obj = form_inputs.getJSON("query_format");
+if(query_format_obj.isEmpty() == false)
+{
+	query_format = query_format_obj.get("value");
+}
+new_form_fields = List();
+// Show the request type specific fields to the end user
+if(request_type == "new_request")
+{
+	// Remove request type specific form input fields
+	new_form_fields.add({"type":"remove","name":"request_id"});
+	if(query_format == "sheet")
+	{
+		// Add sheet format input fields with existing form fields
+		new_form_fields.add({"type":"add_after","name":"query_format","input":{"name":"resource_id","label":"Resource ID","placeholder":"Please enter the zoho sheet file resource id","min_length":"25","max_length":"45","mandatory":true,"type":"text"}});
+		new_form_fields.add({"type":"add_after","name":"resource_id","input":{"name":"sheet_name","label":"Sheet Name","placeholder":"sheet1","min_length":"1","max_length":"30","mandatory":true,"type":"text"}});
+		new_form_fields.add({"type":"add_after","name":"sheet_name","input":{"name":"sheet_id","label":"Sheet ID","placeholder":"1,2,..","min":"1","max":"20","mandatory":true,"type":"number"}});
+		new_form_fields.add({"type":"add_after","name":"sheet_id","input":{"name":"start_row","label":"Start Row","placeholder":"1,2,..","hint":"WWhich row do you want to start reading the queries from?","min":"1","max":"1000","mandatory":true,"type":"number"}});
+		new_form_fields.add({"type":"add_after","name":"start_row","input":{"name":"end_row","label":"End Row","placeholder":"1,2,..","hint":"Which row do you want to stop reading the queries at?","min":"1","max":"1000","mandatory":true,"type":"number"}});
+		new_form_fields.add({"type":"add_after","name":"end_row","input":{"name":"exclude_rows","label":"Exclude Rows","placeholder":"10,10-15,...","hint":"Are there any rows you want to skip while reading the queries?","type":"text"}});
+		new_form_fields.add({"type":"add_after","name":"exclude_rows","input":{"name":"question_column","label":"Question Column","placeholder":"A,B,C,....","hint":"Which column should the queries be taken from?","min_length":"1","max_length":"2","mandatory":true,"type":"text"}});
+		new_form_fields.add({"type":"add_after","name":"question_column","input":{"name":"response_column","label":"Response Column","placeholder":"A,B,C,....","hint":"Which column should the Pathilazh response be written to?","min_length":"1","max_length":"2","mandatory":true,"type":"text"}});
+		// Remove other query format specific fields
+		new_form_fields.add({"type":"remove","name":"queries"});
+	}
+	else if(query_format == "text")
+	{
+		// Add text format inputs fields with existing form fields
+		new_form_fields.add({"type":"add_after","name":"query_format","input":{"name":"queries","label":"Question(s)","placeholder":"If you have more than one query, kindly separate them using ||| symbol.","min_length":"0","max_length":"500","mandatory":true,"type":"textarea"}});
+		// Remove other query format specific fields
+		new_form_fields.add({"type":"remove","name":"resource_id"});
+		new_form_fields.add({"type":"remove","name":"sheet_name"});
+		new_form_fields.add({"type":"remove","name":"sheet_id"});
+		new_form_fields.add({"type":"remove","name":"start_row"});
+		new_form_fields.add({"type":"remove","name":"end_row"});
+		new_form_fields.add({"type":"remove","name":"exclude_rows"});
+		new_form_fields.add({"type":"remove","name":"question_column"});
+		new_form_fields.add({"type":"remove","name":"response_column"});
+	}
+	else
+	{
+		new_form_fields.add({"type":"add_after","name":"request_type","input":{"name":"query_format","label":"Query Format","placeholder":"Please select the Query Format.","mandatory":true,"options":{{"label":"Zoho sheet","value":"sheet"},{"label":"Text Query","value":"text"}},"type":"select","trigger_on_change":true}});
+		// Remove query format specific fields
+		new_form_fields.add({"type":"remove","name":"queries"});
+		new_form_fields.add({"type":"remove","name":"resource_id"});
+		new_form_fields.add({"type":"remove","name":"sheet_name"});
+		new_form_fields.add({"type":"remove","name":"sheet_id"});
+		new_form_fields.add({"type":"remove","name":"start_row"});
+		new_form_fields.add({"type":"remove","name":"end_row"});
+		new_form_fields.add({"type":"remove","name":"exclude_rows"});
+		new_form_fields.add({"type":"remove","name":"question_column"});
+		new_form_fields.add({"type":"remove","name":"response_column"});
+	}
+}
+else if(request_type == "status_enquiry" || request_type == "update_response")
+{
+	// Add the request id input field
+	new_form_fields.add({"type":"add_after","name":"request_type","input":{"name":"request_id","label":"Request ID","placeholder":"","min_length":"15","max_length":"25","mandatory":true,"type":"text"}});
+	// Remove other request type input fields
+	new_form_fields.add({"type":"remove","name":"query_format"});
+	new_form_fields.add({"type":"remove","name":"queries"});
+	new_form_fields.add({"type":"remove","name":"resource_id"});
+	new_form_fields.add({"type":"remove","name":"sheet_name"});
+	new_form_fields.add({"type":"remove","name":"sheet_id"});
+	new_form_fields.add({"type":"remove","name":"start_row"});
+	new_form_fields.add({"type":"remove","name":"end_row"});
+	new_form_fields.add({"type":"remove","name":"exclude_rows"});
+	new_form_fields.add({"type":"remove","name":"question_column"});
+	new_form_fields.add({"type":"remove","name":"response_column"});
+}
+else
+{
+	// Remove all request type specific & query format specific fields
+	new_form_fields.add({"type":"remove","name":"request_id"});
+	new_form_fields.add({"type":"remove","name":"query_format"});
+	new_form_fields.add({"type":"remove","name":"queries"});
+	new_form_fields.add({"type":"remove","name":"resource_id"});
+	new_form_fields.add({"type":"remove","name":"sheet_name"});
+	new_form_fields.add({"type":"remove","name":"sheet_id"});
+	new_form_fields.add({"type":"remove","name":"start_row"});
+	new_form_fields.add({"type":"remove","name":"end_row"});
+	new_form_fields.add({"type":"remove","name":"exclude_rows"});
+	new_form_fields.add({"type":"remove","name":"question_column"});
+	new_form_fields.add({"type":"remove","name":"response_column"});
+}
+return {"type":"form_modification","actions":new_form_fields};

@@ -1,2 +1,0 @@
-# Pathilaz-cliq
-Cliq codes
